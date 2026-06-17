@@ -1,5 +1,5 @@
 """
-Tests for csv2img module.
+Comprehensive tests for csv2img module.
 """
 
 import os
@@ -31,11 +31,9 @@ class TestSaveas(unittest.TestCase):
         """Test saveas with a valid CSV file."""
         result = saveas(str(self.test_csv))
         
-        # Should return a list of file paths
         self.assertIsInstance(result, list)
         self.assertGreater(len(result), 0)
         
-        # All files should exist
         for file_path in result:
             self.assertTrue(Path(file_path).exists())
             self.assertTrue(file_path.endswith('.png'))
@@ -78,16 +76,22 @@ class TestSaveas(unittest.TestCase):
         
         self.assertIsInstance(result, list)
         
-        # All files should be in the custom output directory
         for file_path in result:
             self.assertTrue(file_path.startswith(str(output_dir)))
+
+    def test_saveas_creates_output_dir(self):
+        """Test that saveas creates output directory if it doesn't exist."""
+        output_dir = Path(self.temp_dir) / "new" / "nested" / "dir"
+        result = saveas(str(self.test_csv), output_dir=str(output_dir))
+        
+        self.assertTrue(output_dir.exists())
+        self.assertGreater(len(result), 0)
 
     def test_convert_file_alias(self):
         """Test that convert_file is an alias for saveas."""
         result1 = saveas(str(self.test_csv))
         result2 = convert_file(str(self.test_csv))
         
-        # Both should return the same number of files
         self.assertEqual(len(result1), len(result2))
 
 
@@ -101,11 +105,9 @@ class TestEdgeCases(unittest.TestCase):
             temp_path = f.name
         
         try:
-            # Should handle empty CSV gracefully
             result = saveas(temp_path)
             self.assertIsInstance(result, list)
         except Exception as e:
-            # Some error is acceptable for empty CSV
             pass
         finally:
             os.unlink(temp_path)
@@ -118,6 +120,109 @@ class TestEdgeCases(unittest.TestCase):
             
             result = saveas(str(special_csv))
             self.assertIsInstance(result, list)
+
+    def test_csv_with_many_rows(self):
+        """Test CSV that spans multiple pages."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            big_csv = Path(temp_dir) / "big.csv"
+            lines = ["ID,Name,Value"]
+            for i in range(500):
+                lines.append(f"{i},Item_{i},{i*10}")
+            big_csv.write_text("\n".join(lines))
+            
+            result = saveas(str(big_csv))
+            self.assertIsInstance(result, list)
+            self.assertGreater(len(result), 1)  # Should have multiple pages
+
+    def test_csv_with_unicode(self):
+        """Test CSV with unicode characters — csv2pdf uses latin-1 so non-Latin chars fail."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            unicode_csv = Path(temp_dir) / "unicode.csv"
+            unicode_csv.write_text("姓名,年齡,城市\n蔡徐坤,30,北京\n", encoding="utf-8")
+            
+            # csv2pdf uses courierB (latin-1) which doesn't support CJK
+            with self.assertRaises(Exception):
+                saveas(str(unicode_csv))
+
+    def test_csv_with_commas_in_data(self):
+        """Test CSV with commas inside quoted fields."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_file = Path(temp_dir) / "commas.csv"
+            csv_file.write_text('Name,Description\n"Smith, John","A, B, C"\n')
+            
+            result = saveas(str(csv_file))
+            self.assertIsInstance(result, list)
+
+    def test_csv_large_dpi(self):
+        """Test with very high DPI."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_file = Path(temp_dir) / "test.csv"
+            csv_file.write_text("A,B\n1,2\n")
+            
+            result = saveas(str(csv_file), dpi=600)
+            self.assertIsInstance(result, list)
+            self.assertGreater(len(result), 0)
+
+
+class TestOutputFileNames(unittest.TestCase):
+    """Test that output filenames are correct."""
+
+    def test_output_filename_format(self):
+        """Test that output files follow the naming convention."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_file = Path(temp_dir) / "report.csv"
+            csv_file.write_text("Col1,Col2\na,b\n")
+            
+            output_dir = Path(temp_dir) / "output"
+            result = saveas(str(csv_file), output_dir=str(output_dir))
+            
+            # Check naming: report1.png, report2.png, etc.
+            expected_names = ["report1.png"]
+            actual_names = [os.path.basename(f) for f in result]
+            
+            for expected in expected_names:
+                self.assertIn(expected, actual_names)
+
+    def test_output_in_correct_directory(self):
+        """Test that output files are placed in the correct directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_file = Path(temp_dir) / "data.csv"
+            csv_file.write_text("A,B\n1,2\n")
+            
+            output_dir = Path(temp_dir) / "images"
+            result = saveas(str(csv_file), output_dir=str(output_dir))
+            
+            for file_path in result:
+                self.assertTrue(Path(file_path).parent == output_dir)
+
+
+class TestCLI(unittest.TestCase):
+    """Test the CLI entry point."""
+
+    def test_main_without_args(self):
+        """Test main() with no arguments exits with code 1."""
+        import sys
+        from csv2img.core import main
+        
+        with patch.object(sys, 'argv', ['csv2img']):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+            self.assertEqual(ctx.exception.code, 1)
+
+    def test_main_with_valid_file(self):
+        """Test main() with a valid CSV file."""
+        import sys
+        from csv2img.core import main
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_file = Path(temp_dir) / "test.csv"
+            csv_file.write_text("A,B\n1,2\n")
+            
+            output_dir = Path(temp_dir) / "out"
+            
+            with patch.object(sys, 'argv', ['csv2img', str(csv_file), str(output_dir)]):
+                # Should not raise
+                main()
 
 
 if __name__ == '__main__':

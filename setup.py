@@ -24,7 +24,7 @@ setup(
     url="https://github.com/Shun-Calvin/csv2img",
     packages=find_packages(),
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
@@ -41,7 +41,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "csv2img=csv2img.csv2img:main",
+            "csv2img=csv2img.core:main",
         ],
     },
     keywords="csv image conversion png pdf visualization",

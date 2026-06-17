@@ -76,3 +76,7 @@ Thumbs.db
 !README.png
 test_*.csv
 *.csv
+
+# Orphaned files (package renamed to csv2img/ dir)
+# Keep: __init__.bak
+__init__.bak

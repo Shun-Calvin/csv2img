@@ -129,12 +129,13 @@ def convert_file(csv_file: str, output_dir: Optional[str] = None, dpi: int = 300
     return saveas(csv_file, dpi=dpi, output_dir=output_dir)
 
 
-if __name__ == "__main__":
+def main():
+    """Command-line entry point."""
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python csv2img.py <csv_file> [output_dir] [dpi]")
-        print("Example: python csv2img.py data.csv ./output 300")
+        print("Usage: csv2img <csv_file> [output_dir] [dpi]")
+        print("Example: csv2img data.csv ./output 300")
         sys.exit(1)
     
     csv_file = sys.argv[1]
@@ -149,3 +150,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Error: {e}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
