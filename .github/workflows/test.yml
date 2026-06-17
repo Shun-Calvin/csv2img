@@ -25,12 +25,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e .[dev]
+          pip install pytest
 
       - name: Run tests
-        run: |
-          python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -v
 
-      - name: Check package imports
-        run: |
-          python -c "from csv2img import saveas, convert_file, main; print('OK')"
+      - name: Check package builds
+        run: python -m build
