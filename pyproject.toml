@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csv2img"
+version = "0.3.0"
+description = "Convert CSV files to high-quality PNG/JPEG images"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Calvin_Shun" }
+]
+keywords = ["csv", "image", "conversion", "png", "jpeg", "pdf", "visualization"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+    "Topic :: Office/Business",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "csv2pdf>=0.1.0,<1.0.0",
+    "PyMuPDF>=1.19.0",
+]
+
+[project.scripts]
+csv2img = "csv2img.core:main"
+
+[project.urls]
+"Bug Reports" = "https://github.com/Shun-Calvin/csv2img/issues"
+"Source" = "https://github.com/Shun-Calvin/csv2img"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]

@@ -15,7 +15,7 @@ requirements = [r.strip() for r in requirements if r.strip() and not r.startswit
 
 setup(
     name="csv2img",
-    version="0.2.0",
+    version="0.3.0",
     author="Calvin_Shun",
     author_email="calvin.shun@example.com",
     description="Convert CSV files to PNG images",
