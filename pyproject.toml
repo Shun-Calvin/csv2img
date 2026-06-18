@@ -7,17 +7,15 @@ name = "csv2img"
 version = "0.5.0"
 description = "Convert CSV files to PNG/JPEG images with Unicode support"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.7"
 authors = [{name = "Calvin_Shun"}]
 keywords = ["csv", "image", "conversion", "png", "pdf", "visualization", "unicode", "cjk"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
