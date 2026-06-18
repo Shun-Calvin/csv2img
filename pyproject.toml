@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "csv2img"
-version = "0.5.0"
+version = "1.0.1"
 description = "Convert CSV files to PNG/JPEG images with Unicode support"
 readme = "README.md"
 license = "MIT"
