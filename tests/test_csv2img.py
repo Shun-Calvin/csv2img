@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from csv2img import saveas, convert_file
+from csv2img import saveas, convert_file, __version__, _detect_unicode, _find_fallback_font
 
 
 class TestSaveas(unittest.TestCase):
@@ -93,6 +93,43 @@ class TestSaveas(unittest.TestCase):
         result2 = convert_file(str(self.test_csv))
         
         self.assertEqual(len(result1), len(result2))
+
+
+class TestJPEGQuality(unittest.TestCase):
+    """Test JPEG quality parameter."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.test_csv = Path(self.temp_dir) / "test.csv"
+        self.test_csv.write_text("Name,Age\nAlice,30\n")
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_jpeg_quality_default(self):
+        """Test JPEG output with default quality."""
+        result = saveas(str(self.test_csv), output_format="jpeg")
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].endswith('.jpeg'))
+
+    def test_jpeg_quality_custom(self):
+        """Test JPEG output with custom quality."""
+        result = saveas(str(self.test_csv), output_format="jpeg", jpeg_quality=50)
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].endswith('.jpeg'))
+
+    def test_jpeg_quality_invalid(self):
+        """Test that invalid jpeg_quality raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            saveas(str(self.test_csv), output_format="jpeg", jpeg_quality=0)
+        self.assertIn("jpeg_quality must be between", str(context.exception))
+
+        with self.assertRaises(ValueError) as context:
+            saveas(str(self.test_csv), output_format="jpeg", jpeg_quality=101)
+        self.assertIn("jpeg_quality must be between", str(context.exception))
 
 
 class TestEdgeCases(unittest.TestCase):
@@ -200,6 +237,16 @@ class TestEdgeCases(unittest.TestCase):
             self.assertIsInstance(result, list)
             self.assertGreater(len(result), 0)
 
+    def test_csv_with_semicolon_delimiter(self):
+        """Test CSV with semicolon delimiter."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_file = Path(temp_dir) / "semi.csv"
+            csv_file.write_text("Name;Age;City\nAlice;30;NYC\n")
+            
+            result = saveas(str(csv_file), delimiter=";")
+            self.assertIsInstance(result, list)
+            self.assertGreater(len(result), 0)
+
 
 class TestOutputFileNames(unittest.TestCase):
     """Test that output filenames are correct."""
@@ -260,6 +307,46 @@ class TestCLI(unittest.TestCase):
             with patch.object(sys, 'argv', ['csv2img', str(csv_file), str(output_dir)]):
                 # Should not raise
                 main()
+
+    def test_main_with_version_flag(self):
+        """Test main() with --version flag."""
+        import sys
+        from csv2img.core import main
+        
+        with patch.object(sys, 'argv', ['csv2img', '--version']):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+            self.assertEqual(ctx.exception.code, 0)
+
+
+class TestFontDetection(unittest.TestCase):
+    """Test font detection functions."""
+
+    def test_detect_unicode_ascii(self):
+        """Test _detect_unicode with ASCII-only text."""
+        result = _detect_unicode("Hello, World! 123")
+        # Should return None for pure ASCII
+        self.assertIsNone(result)
+
+    def test_detect_unicode_cjk(self):
+        """Test _detect_unicode with CJK text."""
+        result = _detect_unicode("Hello 你好世界")
+        # May return a font path or None depending on system
+        if result:
+            self.assertTrue(os.path.exists(result))
+
+    def test_find_fallback_font(self):
+        """Test _find_fallback_font returns a valid font path."""
+        result = _find_fallback_font()
+        # May return None if no fonts found, but if it returns something, it should exist
+        if result:
+            self.assertTrue(os.path.exists(result))
+
+    def test_version_string(self):
+        """Test that __version__ is a valid string."""
+        import re
+        self.assertIsInstance(__version__, str)
+        self.assertTrue(re.match(r'\d+\.\d+\.\d+', __version__))
 
 
 if __name__ == '__main__':

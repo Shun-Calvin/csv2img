@@ -1,16 +1,18 @@
 """
-csv2img - Convert CSV files to PNG images.
+csv2img - Convert CSV files to PNG/JPEG images.
 
 This module provides functionality to convert CSV files into high-quality images
 by first rendering them to PDF using fpdf2, then rendering each page as an image.
 
-Supports Unicode (CJK, Arabic, Hebrew, Devanagari, etc.) via configurable TTF/OTF 
-fonts.
+Supports Unicode (CJK, Arabic, Hebrew, Devanagari, etc.) via configurable TTF/OTF
+fonts with cross-platform font detection (Windows, macOS, Linux).
 """
 
 import csv
 import os
+import sys
 import logging
+import platform
 from pathlib import Path
 from typing import Optional, List, Union
 
@@ -34,43 +36,101 @@ logger = logging.getLogger(__name__)
 # Supported output formats
 SUPPORTED_FORMATS = ["png", "jpeg", "jpg"]
 
-# Default font paths — auto-detect from system
-_DEFAULT_FONTS = {
-    "latin": "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
-    "cjk": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "arabic": "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
-    "hebrew": "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
-    "devanagari": "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.otf",
-}
+# Cross-platform font paths
+_SYSTEM = platform.system()
+
+_DEFAULT_FONTS = {}
+
+if _SYSTEM == "Windows":
+    _WIN_FONTS = Path(os.environ.get("WINDIR", "C:\\Windows")) / "Fonts"
+    _DEFAULT_FONTS = {
+        "latin": str(_WIN_FONTS / "arial.ttf"),
+        "cjk": str(_WIN_FONTS / "msyh.ttc"),
+        "arabic": str(_WIN_FONTS / "arial.ttf"),
+        "hebrew": str(_WIN_FONTS / "arial.ttf"),
+        "devanagari": str(_WIN_FONTS / "arial.ttf"),
+    }
+elif _SYSTEM == "Darwin":
+    _DEFAULT_FONTS = {
+        "latin": "/System/Library/Fonts/Helvetica.ttc",
+        "cjk": "/System/Library/Fonts/PingFang.ttc",
+        "arabic": "/System/Library/Fonts/Arabic.ttc",
+        "hebrew": "/System/Library/Fonts/Hebrew.ttc",
+        "devanagari": "/System/Library/Fonts/Devanagari.ttc",
+    }
+else:
+    _DEFAULT_FONTS = {
+        "latin": "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+        "cjk": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "arabic": "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+        "hebrew": "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
+        "devanagari": "/usr/share/fonts/opentype/noto/NotoSansDevanagari-Regular.otf",
+    }
 
 
 def _detect_unicode(text: str) -> Optional[str]:
     """Detect the dominant non-Latin script in text and return the best font path."""
-    has_cjk = any('\u4e00' <= ch <= '\u9fff' or '\u3040' <= ch <= '\u309f' or '\u30a0' <= ch <= '\u30ff' for ch in text)
+    has_cjk = any(
+        '\u4e00' <= ch <= '\u9fff'
+        or '\u3040' <= ch <= '\u309f'
+        or '\u30a0' <= ch <= '\u30ff'
+        or '\uac00' <= ch <= '\ud7af'
+        for ch in text
+    )
     has_arabic = any('\u0600' <= ch <= '\u06ff' or '\u0750' <= ch <= '\u077f' for ch in text)
     has_hebrew = any('\u0590' <= ch <= '\u05ff' for ch in text)
     has_devanagari = any('\u0900' <= ch <= '\u097f' for ch in text)
     has_latin_ext = any('\u0080' <= ch <= '\u024f' for ch in text)
 
     if has_cjk:
-        font = _DEFAULT_FONTS["cjk"]
-        if os.path.exists(font):
+        font = _DEFAULT_FONTS.get("cjk")
+        if font and os.path.exists(font):
             return font
     if has_arabic:
-        font = _DEFAULT_FONTS["arabic"]
-        if os.path.exists(font):
+        font = _DEFAULT_FONTS.get("arabic")
+        if font and os.path.exists(font):
             return font
     if has_hebrew:
-        font = _DEFAULT_FONTS["hebrew"]
-        if os.path.exists(font):
+        font = _DEFAULT_FONTS.get("hebrew")
+        if font and os.path.exists(font):
             return font
     if has_devanagari:
-        font = _DEFAULT_FONTS["devanagari"]
-        if os.path.exists(font):
+        font = _DEFAULT_FONTS.get("devanagari")
+        if font and os.path.exists(font):
             return font
     if has_latin_ext:
-        font = _DEFAULT_FONTS["latin"]
-        if os.path.exists(font):
+        font = _DEFAULT_FONTS.get("latin")
+        if font and os.path.exists(font):
+            return font
+    return None
+
+
+def _find_fallback_font() -> Optional[str]:
+    """Find any available system font as a fallback for non-ASCII content."""
+    candidates = list(_DEFAULT_FONTS.values())
+    if _SYSTEM == "Windows":
+        win_fonts = Path(os.environ.get("WINDIR", "C:\\Windows")) / "Fonts"
+        candidates.extend([
+            str(win_fonts / "arial.ttf"),
+            str(win_fonts / "times.ttf"),
+            str(win_fonts / "cour.ttf"),
+            str(win_fonts / "msyh.ttc"),
+            str(win_fonts / "simsun.ttc"),
+        ])
+    elif _SYSTEM == "Darwin":
+        candidates.extend([
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Times.ttc",
+            "/Library/Fonts/Arial.ttf",
+        ])
+    else:
+        candidates.extend([
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        ])
+    for font in candidates:
+        if font and os.path.exists(font):
             return font
     return None
 
@@ -102,13 +162,17 @@ def _build_pdf(
     # Create PDF in landscape for wide tables
     orientation = 'L' if landscape else 'P'
     pdf = FPDF(orientation=orientation)
-    pdf.add_page()  # fpdf2 requires explicit page creation
+    pdf.add_page()
 
     # Register font(s) if provided
+    use_unicode_font = False
     if font_path and os.path.exists(font_path):
-        # Register both regular and bold variants for fpdf2
-        pdf.add_font("csvfont", "", font_path)
-        pdf.add_font("csvfont", "B", font_path)
+        try:
+            pdf.add_font("csvfont", "", font_path)
+            pdf.add_font("csvfont", "B", font_path)
+            use_unicode_font = True
+        except Exception as e:
+            logger.warning(f"Failed to register font {font_path}: {e}")
 
     # Calculate page width and margins
     margin = 10
@@ -117,7 +181,7 @@ def _build_pdf(
     line_h = pdf.font_size * 2.2
 
     # Header row (bold)
-    if font_path and os.path.exists(font_path):
+    if use_unicode_font:
         pdf.set_font("csvfont", size=10, style="B")
     else:
         pdf.set_font("Courier", size=10, style="B")
@@ -127,7 +191,7 @@ def _build_pdf(
     pdf.ln(line_h)
 
     # Data rows (regular)
-    if font_path and os.path.exists(font_path):
+    if use_unicode_font:
         pdf.set_font("csvfont", size=9)
     else:
         pdf.set_font("Courier", size=9)
@@ -148,6 +212,7 @@ def saveas(
     output_format: str = "png",
     delimiter: str = ",",
     font_path: Optional[str] = None,
+    jpeg_quality: int = 95,
 ) -> List[str]:
     """
     Convert a CSV file to image files.
@@ -163,6 +228,7 @@ def saveas(
         delimiter: CSV delimiter character (default: ',')
         font_path: Optional path to a TTF/OTF font file. If None, auto-detects
                    from system fonts based on CSV content.
+        jpeg_quality: JPEG quality 1-100 (default: 95). Only used for JPEG output.
 
     Returns:
         List of paths to the generated image files
@@ -198,6 +264,9 @@ def saveas(
     if fmt not in SUPPORTED_FORMATS:
         raise ValueError(f"Unsupported format '{output_format}'. Supported: {SUPPORTED_FORMATS}")
 
+    if not (1 <= jpeg_quality <= 100):
+        raise ValueError(f"jpeg_quality must be between 1 and 100, got: {jpeg_quality}")
+
     fmt_upper = fmt.upper()
 
     # Determine output directory and base name
@@ -212,7 +281,6 @@ def saveas(
 
     # Auto-detect font if not provided
     if font_path is None:
-        # Read CSV content to detect script
         try:
             with open(source_path, 'r', encoding='utf-8') as f:
                 csv_content = f.read()
@@ -220,7 +288,17 @@ def saveas(
             if font_path:
                 logger.info(f"Auto-detected font: {os.path.basename(font_path)}")
             else:
-                logger.info("No special font needed (ASCII-only content)")
+                # Check if any non-ASCII characters exist
+                has_non_ascii = any(ord(ch) > 127 for ch in csv_content)
+                if has_non_ascii:
+                    fallback = _find_fallback_font()
+                    if fallback:
+                        font_path = fallback
+                        logger.info(f"Using fallback font: {os.path.basename(font_path)}")
+                    else:
+                        logger.warning("Non-ASCII content detected but no suitable font found")
+                else:
+                    logger.info("No special font needed (ASCII-only content)")
         except UnicodeDecodeError:
             logger.warning("Could not detect font (encoding issue), using default")
 
@@ -243,7 +321,10 @@ def saveas(
             pix = page.get_pixmap(dpi=dpi)
             ext = fmt if fmt != "jpg" else "jpeg"
             output_file = output_path / f"{base_name}{page_num}.{ext}"
-            pix.save(str(output_file))
+            if ext == "jpeg":
+                pix.save(str(output_file), jpg_quality=jpeg_quality)
+            else:
+                pix.save(str(output_file))
             output_files.append(str(output_file))
             logger.info(f"Created image: {output_file}")
 
@@ -272,6 +353,7 @@ def convert_file(
     output_format: str = "png",
     delimiter: str = ",",
     font_path: Optional[str] = None,
+    jpeg_quality: int = 95,
 ) -> List[str]:
     """
     Alias for saveas() function for backwards compatibility.
@@ -283,13 +365,15 @@ def convert_file(
         output_format: Output format ('png', 'jpeg', 'jpg')
         delimiter: CSV delimiter character
         font_path: Optional font path for Unicode support
+        jpeg_quality: JPEG quality 1-100 (default: 95)
 
     Returns:
         List of generated image file paths
     """
     return saveas(
         csv_file, dpi=dpi, output_dir=output_dir,
-        output_format=output_format, delimiter=delimiter, font_path=font_path
+        output_format=output_format, delimiter=delimiter, font_path=font_path,
+        jpeg_quality=jpeg_quality
     )
 
 
@@ -300,8 +384,14 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: csv2img <csv_file> [output_dir] [dpi]")
         print("       csv2img <csv_file> [output_dir] [dpi] [--format png|jpeg] [--font path.ttf]")
+        print("       csv2img <csv_file> [output_dir] [dpi] [--quality 95]")
         print("Example: csv2img data.csv ./output 300")
         sys.exit(1)
+
+    if sys.argv[1] in ('--version', '-v'):
+        from csv2img import __version__
+        print(f"csv2img {__version__}")
+        sys.exit(0)
 
     csv_file = sys.argv[1]
     output_dir = None
@@ -309,6 +399,7 @@ def main():
     output_format = "png"
     delimiter = ","
     font_path = None
+    jpeg_quality = 95
 
     i = 2
     while i < len(sys.argv):
@@ -322,6 +413,9 @@ def main():
         elif arg == '--delimiter' and i + 1 < len(sys.argv):
             delimiter = sys.argv[i + 1]
             i += 2
+        elif arg == '--quality' and i + 1 < len(sys.argv):
+            jpeg_quality = int(sys.argv[i + 1])
+            i += 2
         elif arg.replace('-', '').isdigit():
             dpi = int(arg)
             i += 1
@@ -331,12 +425,14 @@ def main():
 
     try:
         output_files = saveas(csv_file, dpi=dpi, output_dir=output_dir,
-                              output_format=output_format, delimiter=delimiter, font_path=font_path)
-        print(f"\u2713 Successfully converted {csv_file} to {len(output_files)} image(s)")
+                              output_format=output_format, delimiter=delimiter,
+                              font_path=font_path, jpeg_quality=jpeg_quality)
+        # Use ASCII-safe symbols for Windows console compatibility
+        print(f"[OK] Successfully converted {csv_file} to {len(output_files)} image(s)")
         for f in output_files:
             print(f"  - {f}")
     except Exception as e:
-        print(f"\u2717 Error: {e}")
+        print(f"[ERROR] {e}")
         sys.exit(1)
 
 
